@@ -1,76 +1,124 @@
+
 let table;
+let glyphData = []; // array per salvare i dati dei glifi
+// Numero fisso di raggi per ogni glifo
+const RAYS = 8;
+
 function preload() {
   table = loadTable("asset/dataset.csv", "csv", "header");
 }
+
 function setup() {
-  console.log(table);
-  let padding = 60;
-  createCanvas(windowWidth, windowHeight);
-  background(10, 10, 90);
-  
-  for (let rowNumber = 0; rowNumber < table.getRowCount(); rowNumber++) { //per ogni riga del dataset esegue il corpo del ciclo
-    let data = table.getRow(rowNumber).obj; //prende i dati della riga corrente come oggetto e li salva nella varabile data
-    
-    // COLONNA 0: dimensione
-    let sizeValue = data["column0"]; //prendo il valore nella colonna 0 della riga corrente
-    let allSizeValues = table.getColumn("column0"); //prendo tutti i valori della colonna 0
-    let minSize = min(allSizeValues); //definisco minimo e massimo dei valori della colonna 0
+  let padding = 60; // spazio laterale usato nella mappatura delle posizioni
+  createCanvas(windowWidth, windowHeight); // canvas a tutta larghezza/altezza della finestra
+  background(10, 10, 90); // sfondo scuro blu
+
+  // Precalcolo i dati di tutti i glifi una sola volta.
+  for (let rowNumber = 0; rowNumber < table.getRowCount(); rowNumber++) {
+    // table.getRow(rowNumber).obj ritorna un oggetto con chiavi corrispondenti alle intestazioni del CSV
+    let data = table.getRow(rowNumber).obj;
+
+    //COLONNA 0:lunghezza delle linee
+    // Prendo il valore raw dalla cella e poi usiamo min()/max() su tutta la colonna per normalizzare e mappare su un intervallo utile.
+    let sizeValue = data["column0"];
+    let allSizeValues = table.getColumn("column0");
+    let minSize = min(allSizeValues);
     let maxSize = max(allSizeValues);
-    let lineLength = map(sizeValue, minSize, maxSize, 8, 45); //mappo il valore della colonna 0 della riga corrente in un intervallo di lunghezze delle linee
-    
-    // COLONNA 1: colore
+    // map() mappa i valori originali nell'intervallo visivo desiderato (8..45 px)
+    let lineLength = map(sizeValue, minSize, maxSize, 8, 45);
+
+    //COLONNA 1: colore 
     let colorValue = data["column1"];
     let allColorValues = table.getColumn("column1");
     let minColor = min(allColorValues);
     let maxColor = max(allColorValues);
-    let colorNorm = map(colorValue, minColor, maxColor, 0, 1); //normalizzo il valore della colonna 1 tra 0 e 1
+    
+    // normalizzo a 0..1 per usare lerpColor()
+    let colorNorm = map(colorValue, minColor, maxColor, 0, 1);
     let c1 = color(255, 0, 0); // rosso saturo
     let c2 = color(255, 255, 255); // bianco
-    let mappedColor = lerpColor(c1, c2, colorNorm); //interpolazione tra i due colori in base al valore normalizzato prima tra 0 e 1
     
-    // COLONNA 2: numero linee
-    let numValue = data["column2"];
-    let allNumValues = table.getColumn("column2");
-    let minNum = min(allNumValues);
-    let maxNum = max(allNumValues);
-    let numLines = round(map(numValue, minNum, maxNum, 5, 20)); //mappo il valore della colonna 2 in un intervallo di numero di linee e arrotondo al numero intero più vicino
-    
-    // COLONNA 3: spessore linee
+    // mappedColor è il colore effettivo usato per lo stroke del glifo
+    let mappedColor = lerpColor(c1, c2, colorNorm);
+
+    //COLONNA 2: velocità di rotazione
+    // Usiamo la colonna 2 per definire la velocità di rotazione del glifo, prima normalizzo la colonna; poi mappo su un intervallo angolare
+    let rotValue = data["column2"];
+    let allRotValues = table.getColumn("column2");
+    let minRot = min(allRotValues);
+    let maxRot = max(allRotValues);
+    let rotationSpeed = map(rotValue, minRot, maxRot, -360, 360); // gradi riferiti a un periodo di riferimento
+
+    //COLONNA 3: spessore delle linee
     let strokeValue = data["column3"];
     let allStrokeValues = table.getColumn("column3");
     let minStroke = min(allStrokeValues);
     let maxStroke = max(allStrokeValues);
-    let weight = map(strokeValue, minStroke, maxStroke, 1, 5); //mappo il valore della colonna 3 in un intervallo di spessori delle linee
-    
-    // COLONNA 4: posizione X
+    let weight = map(strokeValue, minStroke, maxStroke, 1, 5);
+
+    //COLONNA 4: posizione X
+    // mappo il valore su un intervallo orizzontale utile (da 60 px a windowWidth-60 px)così i glifi non vengono disegnati sui bordi estremi.
     let posXValue = data["column4"];
     let allPosXValues = table.getColumn("column4");
     let minPosX = min(allPosXValues);
     let maxPosX = max(allPosXValues);
-    let xPosition = map(posXValue, minPosX, maxPosX, padding, windowWidth - padding); //mappo il valore della colonna 4 in un intervallo di posizioni X
-    
-    // Posizione Y: una riga dopo l'altra
-    let yPosition = padding + (rowNumber / table.getRowCount()) * (windowHeight - padding * 2); 
-    
-    // disegno il glifo
-    drawGlyph(xPosition, yPosition, numLines, lineLength, weight, mappedColor);
-  }
-}
+    let xPosition = map(posXValue, minPosX, maxPosX, 60, windowWidth - 60);
 
-function drawGlyph(centerX, centerY, numLines, lineLength, weight, glyphColor) {
-  stroke(glyphColor);
-  strokeWeight(weight);
-  strokeCap(ROUND);
-  
-  // disegno le linee del glifo
-  for (let i = 0; i < numLines; i++) {
-    let angle = (i / numLines) * TWO_PI;
-    let x2 = centerX + cos(angle) * lineLength;
-    let y2 = centerY + sin(angle) * lineLength;
-    line(centerX, centerY, x2, y2);
+    // Posizione Y: distribuiamo i glifi verticalmente in una colonna scalando in base all'indice di riga. L'offset 60 lascia margine.
+    let yPosition = 60 + (rowNumber / table.getRowCount()) * (windowHeight - 120);
+
+    // Salvo i dati preprocessati per questo glifo nell'array globale.
+    // In draw() useremo questi valori per disegnare/animare senza ricalcolare.
+    glyphData.push({
+      x: xPosition,
+      y: yPosition,
+      lineLength: lineLength,
+      weight: weight,
+      color: mappedColor,
+      rotationSpeed: rotationSpeed // gradi per periodo di riferimento
+    });
   }
+  
 }
 
 function draw() {
-  //non disegno qui perchè non ci sono animazioni e non c'è bisogno che il codice sia eseguito più volte
+  background(10, 10, 90);
+
+  // ciclo sui dati preprocessati che disegna ogni glifo con la trasformazione giusta
+  for (let glyph of glyphData) {
+    push(); // salva lo stato di trasformazione e stile
+
+    // traslo il sistema di coordinate in modo che il glifo venga disegnato intorno a (0,0) ma posizionato visivamente in (glyph.x, glyph.y).
+    translate(glyph.x, glyph.y);
+
+    // Calcolo dell'angolo di rotazione: usiamo frameCount come tempo.
+
+    // Qui trasformo i gradi in radianti e moltiplico per frameCount
+    //radians() converte gradi in radianti.
+    let angle = radians((glyph.rotationSpeed / 80) * frameCount);
+    rotate(angle); // rotationSpeed è espresso in gradi
+
+    // disegno il glifo al centro locale (0,0)
+    drawGlyph(0, 0, glyph.lineLength, glyph.weight, glyph.color);
+
+    pop(); // ripristina stato di trasformazione e stile precedente
+  }
+}
+
+function drawGlyph(centerX, centerY, lineLength, weight, glyphColor) {
+  // Impostazioni di stile per il disegno del glifo
+  stroke(glyphColor); // colore della linea
+  strokeWeight(weight); // spessore della linea
+  strokeCap(ROUND); // estremità arrotondate delle linee
+
+  //disegno raggi del glifo
+  for (let i = 0; i < RAYS; i++) {
+    // calcolo dell'angolo in radianti
+    let angle = (i / RAYS) * TWO_PI;
+    // coordinate del punto terminale del raggio
+    let x2 = centerX + cos(angle) * lineLength;
+    let y2 = centerY + sin(angle) * lineLength;
+    // disegno la linea dal centro al punto calcolato
+    line(centerX, centerY, x2, y2);
+  }
 }
