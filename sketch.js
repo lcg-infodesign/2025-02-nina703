@@ -1,8 +1,9 @@
-
 let table;
 let glyphData = []; // array per salvare i dati dei glifi
 // Numero fisso di raggi per ogni glifo
 const RAYS = 8;
+// Numero di colonne nella griglia verticale
+const NUM_COLUMNS = 8;
 
 function preload() {
   table = loadTable("asset/dataset.csv", "csv", "header");
@@ -56,16 +57,20 @@ function setup() {
     let maxStroke = max(allStrokeValues);
     let weight = map(strokeValue, minStroke, maxStroke, 1, 5);
 
-    //COLONNA 4: posizione X
-    // mappo il valore su un intervallo orizzontale utile (da 60 px a windowWidth-60 px)così i glifi non vengono disegnati sui bordi estremi.
-    let posXValue = data["column4"];
-    let allPosXValues = table.getColumn("column4");
-    let minPosX = min(allPosXValues);
-    let maxPosX = max(allPosXValues);
-    let xPosition = map(posXValue, minPosX, maxPosX, 60, windowWidth - 60);
+    //COLONNA 4: posizione Y
+    // mappo il valore della colonna 4 su un intervallo verticale
+    let posYValue = data["column4"];
+    let allPosYValues = table.getColumn("column4");
+    let minPosY = min(allPosYValues);
+    let maxPosY = max(allPosYValues);
+    let yPosition = map(posYValue, minPosY, maxPosY, 60, windowHeight - 60);
 
-    // Posizione Y: distribuiamo i glifi verticalmente in una colonna scalando in base all'indice di riga. L'offset 60 lascia margine.
-    let yPosition = 60 + (rowNumber / table.getRowCount()) * (windowHeight - 120);
+    // Posizione X: dividiamo gli glifi in colonne fisse e sequenziali
+    // ogni glifo occupa una colonna in base al suo indice di riga
+    let columnIndex = floor((rowNumber / table.getRowCount()) * NUM_COLUMNS);
+    if (columnIndex >= NUM_COLUMNS) columnIndex = NUM_COLUMNS - 1; // evita overflow
+    let columnWidth = (windowWidth - padding * 2) / NUM_COLUMNS;
+    let xPosition = padding + columnIndex * columnWidth + columnWidth / 2;
 
     // Salvo i dati preprocessati per questo glifo nell'array globale.
     // In draw() useremo questi valori per disegnare/animare senza ricalcolare.
